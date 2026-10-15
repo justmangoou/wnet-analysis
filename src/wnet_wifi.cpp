@@ -30,9 +30,11 @@ static void scanNetworks() {
   WiFi.scanDelete();
 }
 
-void wnetStationSetup() {
+void wnetStationSetup(bool dhcp) {
   Serial.begin(115200);
-  WiFi.config(ip, gateway, subnet, dns);
+  if (!dhcp) {
+    WiFi.config(ip, dns, gateway, subnet);
+  }
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
