@@ -8,7 +8,6 @@ static const char* btName = "WNET-ESP32-BT";
 static BluetoothSerial btSerial;
 
 void bluetoothSetup() {
-  Serial.begin(115200);
   if (!btSerial.begin(btName)) {
     Serial.println("Bluetooth init failed");
     return;

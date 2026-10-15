@@ -2,23 +2,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiUdp.h>
 #include <esp_wifi.h>
-
-// Station
-
-static const char* ssid = "UET-Wifi-Office-Free 2.4Ghz";
-static const char* password = NULL;
-
-// Set true for board A, false for board B before uploading.
-static const bool isBoardA = true;
-static IPAddress ip = isBoardA ? IPAddress(10, 11, 101, 115)
-                             : IPAddress(10, 11, 101, 116);
-static IPAddress peerIp = isBoardA ? IPAddress(10, 11, 101, 116)
-                                 : IPAddress(10, 11, 101, 115);
-static IPAddress dns(10, 11, 184, 1);
-static IPAddress gateway(10, 11, 184, 1);
-static IPAddress subnet(255, 255, 248, 0);
 
 static void scanNetworks() {
   Serial.println("\nScanning...");
@@ -36,8 +20,9 @@ static void scanNetworks() {
   WiFi.scanDelete();
 }
 
+// Station
+
 void wnetStationSetup(bool dhcp) {
-  Serial.begin(115200);
   WiFi.mode(WIFI_STA);
   bool configured = dhcp
                         ? WiFi.config(IPAddress(), IPAddress(), IPAddress())
@@ -46,7 +31,7 @@ void wnetStationSetup(bool dhcp) {
     Serial.println("Failed to configure station IP settings");
     return;
   }
-  WiFi.begin(ssid, password);
+  WiFi.begin(UPSTREAM_SSID, UPSTREAM_PASSWORD);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -71,121 +56,11 @@ void wnetStationSetup(bool dhcp) {
   scanNetworks();
 }
 
-void wnetStationLoop() {}
-
-static WiFiUDP messageUdp;
-static const uint16_t messagePort = 4210;
-static const size_t messageMaxLength = 240;
-static char messageLine[messageMaxLength + 1];
-static size_t messageLength = 0;
-static bool messageOverflow = false;
-static bool messageListening = false;
-static uint32_t messageLastBindAttempt = 0;
-
-static void sendMessage() {
-  if (WiFi.status() != WL_CONNECTED || !messageListening) {
-    Serial.println("Not connected; message was not sent");
-    return;
-  }
-
-  if (!messageUdp.beginPacket(peerIp, messagePort)) {
-    Serial.println("Failed to start message packet");
-    return;
-  }
-  size_t written = messageUdp.write(
-      reinterpret_cast<const uint8_t*>(messageLine), messageLength);
-  int sent = messageUdp.endPacket();
-  if (written != messageLength || !sent) {
-    Serial.println("Failed to send message");
-    return;
-  }
-  Serial.printf("[TX] %s\n", messageLine);
-}
-
-void wnetMessageSetup() {
-  messageUdp.stop();
-  messageListening = false;
-  messageLength = 0;
-  messageOverflow = false;
-  wnetStationSetup(false);
-  if (WiFi.status() != WL_CONNECTED) {
-    return;
-  }
-  messageLastBindAttempt = millis();
-  messageListening = messageUdp.begin(messagePort) != 0;
-  if (!messageListening) {
-    Serial.println("Failed to start UDP listener; will retry");
-  }
-  Serial.printf("Board %s | Peer: %s:%u\n", isBoardA ? "A" : "B",
-                peerIp.toString().c_str(), messagePort);
-  Serial.printf("Messages use UDP port %u. Type up to %u bytes and press Enter.\n",
-                messagePort, static_cast<unsigned>(messageMaxLength));
-}
-
-void wnetMessageLoop() {
-  if (WiFi.status() != WL_CONNECTED) {
-    if (messageListening) {
-      messageUdp.stop();
-      messageListening = false;
-    }
-  } else if (!messageListening &&
-             millis() - messageLastBindAttempt >= 1000) {
-    messageLastBindAttempt = millis();
-    messageListening = messageUdp.begin(messagePort) != 0;
-  }
-
-  if (messageListening) {
-    int packetSize = messageUdp.parsePacket();
-    if (packetSize > 0) {
-      IPAddress sender = messageUdp.remoteIP();
-      if (sender == peerIp && messageUdp.remotePort() == messagePort &&
-          packetSize <= messageMaxLength) {
-        char received[messageMaxLength + 1];
-        int count = messageUdp.read(received, messageMaxLength);
-        if (count > 0) {
-          received[count] = '\0';
-          Serial.printf("[RX %s] %s\n", sender.toString().c_str(), received);
-        }
-      }
-      messageUdp.flush();
-    }
-  }
-
-  // Bound work per loop so incoming packets still get serviced while typing.
-  for (size_t i = 0; i < 64 && Serial.available(); ++i) {
-    char c = static_cast<char>(Serial.read());
-    if (c == '\r' || c == '\n') {
-      if (messageOverflow) {
-        Serial.println("Message too long (maximum 240 bytes); discarded");
-      } else if (messageLength > 0) {
-        messageLine[messageLength] = '\0';
-        sendMessage();
-      }
-      messageLength = 0;
-      messageOverflow = false;
-    } else if (!messageOverflow) {
-      if (messageLength < messageMaxLength) {
-        messageLine[messageLength++] = c;
-      } else {
-        messageOverflow = true;
-      }
-    }
-  }
-  delay(1);
-}
-
 // AP
 
-static const char* apSsid = "Namper";
-static const char* apPassword = "36363636";
-static const int apChannel = 1;
-static const int apMaxClients = 2;
-
-static IPAddress apIp(192, 168, 10, 1);
-static IPAddress apGateway(192, 168, 10, 1);
-static IPAddress apSubnet(255, 255, 255, 0);
-
 static uint32_t lastSignature = 0;
+static bool apWithUpstream = false;
+static IPAddress lastStationIp;
 
 static uint32_t printClients(bool print) {
   wifi_sta_list_t list;
@@ -216,15 +91,19 @@ static uint32_t printClients(bool print) {
   return sig;
 }
 
-void wnetApSetup() {
-  Serial.begin(115200);
-  WiFi.mode(WIFI_AP);
+void wnetApSetup(bool withUpstream) {
+  apWithUpstream = withUpstream;
+  lastStationIp = IPAddress();
+  WiFi.mode(withUpstream ? WIFI_AP_STA : WIFI_AP);
   WiFi.softAPConfig(apIp, apGateway, apSubnet);
-  WiFi.softAP(apSsid, apPassword, apChannel, 0, apMaxClients);
+  WiFi.softAP(AP_SSID, AP_PASSWORD, apChannel, 0, apMaxClients);
+  if (withUpstream) {
+    WiFi.begin(UPSTREAM_SSID, UPSTREAM_PASSWORD);
+  }
 
   Serial.println("AP started");
   Serial.print("SSID: ");
-  Serial.println(apSsid);
+  Serial.println(AP_SSID);
   Serial.print("AP IP (gateway): ");
   Serial.println(WiFi.softAPIP());
   Serial.print("AP MAC: ");
@@ -232,6 +111,20 @@ void wnetApSetup() {
 }
 
 void wnetApLoop() {
+  if (apWithUpstream) {
+    IPAddress stationIp = WiFi.status() == WL_CONNECTED
+                              ? WiFi.localIP() : IPAddress();
+    if (stationIp != lastStationIp) {
+      lastStationIp = stationIp;
+      if (stationIp != IPAddress()) {
+        Serial.print("Station IP (upstream): ");
+        Serial.println(stationIp);
+      } else {
+        Serial.println("Upstream station disconnected");
+      }
+    }
+  }
+
   uint32_t sig = printClients(false);
   if (sig != lastSignature) {
     lastSignature = sig;
