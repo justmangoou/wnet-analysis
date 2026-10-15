@@ -6,7 +6,7 @@
 
 // Station
 
-static const char* ssid = "UET-Wifi-Office-Free 5hz";
+static const char* ssid = "UET-Wifi-Office-Free 2.4Ghz";
 static const char* password = NULL;
 
 static IPAddress ip(10, 11, 185, 100);
@@ -32,8 +32,13 @@ static void scanNetworks() {
 
 void wnetStationSetup(bool dhcp) {
   Serial.begin(115200);
-  if (!dhcp) {
-    WiFi.config(ip, dns, gateway, subnet);
+  WiFi.mode(WIFI_STA);
+  bool configured = dhcp
+                        ? WiFi.config(IPAddress(), IPAddress(), IPAddress())
+                        : WiFi.config(ip, gateway, subnet, dns);
+  if (!configured) {
+    Serial.println("Failed to configure station IP settings");
+    return;
   }
   WiFi.begin(ssid, password);
 
