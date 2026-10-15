@@ -3,15 +3,23 @@
 #include <IPAddress.h>
 
 // Station Config
-static const char* UPSTREAM_SSID = "UET-Wifi-Office-Free 2.4Ghz";
-static const char* UPSTREAM_PASSWORD = nullptr;
+// static const char* UPSTREAM_SSID = "UET-Wifi-Office-Free 2.4Ghz";
+// static const char* UPSTREAM_PASSWORD = nullptr;
+static const char* UPSTREAM_SSID = "Gateway_LAN";
+static const char* UPSTREAM_PASSWORD = "12345678";
 
 // Local station address and UDP destination. Swap these on the second board.
-static IPAddress ip = IPAddress(10, 11, 101, 115);
-static IPAddress peerIp = IPAddress(10, 11, 101, 116);
-static IPAddress dns(10, 11, 96, 1);
-static IPAddress gateway(10, 11, 96, 1);
-static IPAddress subnet(255, 255, 248, 0);
+// static IPAddress ip = IPAddress(10, 11, 101, 115);
+// static IPAddress peerIp = IPAddress(10, 11, 101, 116);
+// static IPAddress dns(10, 11, 96, 1);
+// static IPAddress gateway(10, 11, 96, 1);
+// static IPAddress subnet(255, 255, 248, 0);
+static IPAddress ip = IPAddress(192, 168, 4, 115);
+static IPAddress peerIp = IPAddress(192, 168, 4, 116);
+static IPAddress dns(192, 168, 4, 1);
+static IPAddress gateway(192, 168, 4, 1);
+static IPAddress subnet(255, 255, 255, 0);
+
 
 // AP Config
 static const char* AP_SSID = "Wifi Test";
