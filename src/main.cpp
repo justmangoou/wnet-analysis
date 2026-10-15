@@ -2,7 +2,6 @@
 
 #include "wnet_wifi.h"
 
-// Gateway: create the local AP and connect to the internet router.
 void setup() {
   Serial.begin(115200);
   wnetApSetup(true);
@@ -11,5 +10,5 @@ void setup() {
 
 void loop() {
   wnetApLoop();
-  wnetMessageLoop(true);  // Forward received plain text to httpbin.
+  wnetMessageLoop(true);
 }
