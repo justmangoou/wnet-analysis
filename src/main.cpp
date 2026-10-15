@@ -3,9 +3,9 @@
 #include "wnet_wifi.h"
 
 void setup() {
-  wnetStationSetup(true);
+  wnetMessageSetup();
 }
 
 void loop() {
-  wnetStationLoop();
+  wnetMessageLoop();
 }

@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 #include <esp_wifi.h>
 
 // Station
@@ -66,6 +67,108 @@ void wnetStationSetup(bool dhcp) {
 }
 
 void wnetStationLoop() {}
+
+static WiFiUDP messageUdp;
+static const uint16_t messagePort = 4210;
+static const size_t messageMaxLength = 240;
+static char messageLine[messageMaxLength + 1];
+static size_t messageLength = 0;
+static bool messageOverflow = false;
+static bool messageListening = false;
+static uint32_t messageLastBindAttempt = 0;
+
+static void sendMessage() {
+  if (WiFi.status() != WL_CONNECTED || !messageListening) {
+    Serial.println("Not connected; message was not sent");
+    return;
+  }
+
+  IPAddress local = WiFi.localIP();
+  IPAddress mask = WiFi.subnetMask();
+  IPAddress broadcast;
+  for (int i = 0; i < 4; ++i) {
+    broadcast[i] = local[i] | static_cast<uint8_t>(~mask[i]);
+  }
+
+  if (!messageUdp.beginPacket(broadcast, messagePort)) {
+    Serial.println("Failed to start message packet");
+    return;
+  }
+  size_t written = messageUdp.write(
+      reinterpret_cast<const uint8_t*>(messageLine), messageLength);
+  int sent = messageUdp.endPacket();
+  if (written != messageLength || !sent) {
+    Serial.println("Failed to send message");
+    return;
+  }
+  Serial.printf("[TX] %s\n", messageLine);
+}
+
+void wnetMessageSetup() {
+  messageUdp.stop();
+  messageListening = false;
+  messageLength = 0;
+  messageOverflow = false;
+  wnetStationSetup(true);
+  messageLastBindAttempt = millis();
+  messageListening = messageUdp.begin(messagePort) != 0;
+  if (!messageListening) {
+    Serial.println("Failed to start UDP listener; will retry");
+  }
+  Serial.printf("Messages use UDP port %u. Type up to %u bytes and press Enter.\n",
+                messagePort, static_cast<unsigned>(messageMaxLength));
+}
+
+void wnetMessageLoop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    if (messageListening) {
+      messageUdp.stop();
+      messageListening = false;
+    }
+  } else if (!messageListening &&
+             millis() - messageLastBindAttempt >= 1000) {
+    messageLastBindAttempt = millis();
+    messageListening = messageUdp.begin(messagePort) != 0;
+  }
+
+  if (messageListening) {
+    int packetSize = messageUdp.parsePacket();
+    if (packetSize > 0) {
+      IPAddress sender = messageUdp.remoteIP();
+      if (sender != WiFi.localIP() && packetSize <= messageMaxLength) {
+        char received[messageMaxLength + 1];
+        int count = messageUdp.read(received, messageMaxLength);
+        if (count > 0) {
+          received[count] = '\0';
+          Serial.printf("[RX %s] %s\n", sender.toString().c_str(), received);
+        }
+      }
+      messageUdp.flush();
+    }
+  }
+
+  // Bound work per loop so incoming packets still get serviced while typing.
+  for (size_t i = 0; i < 64 && Serial.available(); ++i) {
+    char c = static_cast<char>(Serial.read());
+    if (c == '\r' || c == '\n') {
+      if (messageOverflow) {
+        Serial.println("Message too long (maximum 240 bytes); discarded");
+      } else if (messageLength > 0) {
+        messageLine[messageLength] = '\0';
+        sendMessage();
+      }
+      messageLength = 0;
+      messageOverflow = false;
+    } else if (!messageOverflow) {
+      if (messageLength < messageMaxLength) {
+        messageLine[messageLength++] = c;
+      } else {
+        messageOverflow = true;
+      }
+    }
+  }
+  delay(1);
+}
 
 // AP
 
