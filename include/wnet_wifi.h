@@ -4,7 +4,7 @@
 void wnetStationSetup(bool dhcp);
 void wnetStationLoop();
 
-// Two-way Serial messages between stations on the same AP (UDP broadcast).
+// Two-way Serial messages with a configured peer on the same AP (static IP, UDP unicast).
 void wnetMessageSetup();
 void wnetMessageLoop();
 

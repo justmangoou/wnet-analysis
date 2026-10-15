@@ -10,7 +10,12 @@
 static const char* ssid = "UET-Wifi-Office-Free 2.4Ghz";
 static const char* password = NULL;
 
-static IPAddress ip(10, 11, 185, 100);
+// Set true for board A, false for board B before uploading.
+static const bool isBoardA = true;
+static IPAddress ip = isBoardA ? IPAddress(10, 11, 101, 115)
+                             : IPAddress(10, 11, 101, 116);
+static IPAddress peerIp = isBoardA ? IPAddress(10, 11, 101, 116)
+                                 : IPAddress(10, 11, 101, 115);
 static IPAddress dns(10, 11, 184, 1);
 static IPAddress gateway(10, 11, 184, 1);
 static IPAddress subnet(255, 255, 248, 0);
@@ -83,14 +88,7 @@ static void sendMessage() {
     return;
   }
 
-  IPAddress local = WiFi.localIP();
-  IPAddress mask = WiFi.subnetMask();
-  IPAddress broadcast;
-  for (int i = 0; i < 4; ++i) {
-    broadcast[i] = local[i] | static_cast<uint8_t>(~mask[i]);
-  }
-
-  if (!messageUdp.beginPacket(broadcast, messagePort)) {
+  if (!messageUdp.beginPacket(peerIp, messagePort)) {
     Serial.println("Failed to start message packet");
     return;
   }
@@ -109,12 +107,17 @@ void wnetMessageSetup() {
   messageListening = false;
   messageLength = 0;
   messageOverflow = false;
-  wnetStationSetup(true);
+  wnetStationSetup(false);
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
   messageLastBindAttempt = millis();
   messageListening = messageUdp.begin(messagePort) != 0;
   if (!messageListening) {
     Serial.println("Failed to start UDP listener; will retry");
   }
+  Serial.printf("Board %s | Peer: %s:%u\n", isBoardA ? "A" : "B",
+                peerIp.toString().c_str(), messagePort);
   Serial.printf("Messages use UDP port %u. Type up to %u bytes and press Enter.\n",
                 messagePort, static_cast<unsigned>(messageMaxLength));
 }
@@ -135,7 +138,8 @@ void wnetMessageLoop() {
     int packetSize = messageUdp.parsePacket();
     if (packetSize > 0) {
       IPAddress sender = messageUdp.remoteIP();
-      if (sender != WiFi.localIP() && packetSize <= messageMaxLength) {
+      if (sender == peerIp && messageUdp.remotePort() == messagePort &&
+          packetSize <= messageMaxLength) {
         char received[messageMaxLength + 1];
         int count = messageUdp.read(received, messageMaxLength);
         if (count > 0) {
@@ -193,6 +197,11 @@ static uint32_t printClients(bool print) {
   uint32_t sig = list.num + 1;
   if (print) {
     Serial.printf("Connected devices: %d\n", list.num);
+    if (list.num >= apMaxClients) {
+      Serial.printf("Note: AP client limit reached (%d/%d). "
+                    "New devices cannot connect until a client disconnects.\n",
+                    list.num, apMaxClients);
+    }
   }
   for (int i = 0; i < ipList.num; i++) {
     const uint8_t* m = ipList.sta[i].mac;
