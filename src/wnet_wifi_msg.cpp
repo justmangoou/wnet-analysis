@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <HTTPClient.h>
 
 static WiFiUDP messageUdp;
 static const uint16_t messagePort = 4210;
@@ -56,7 +57,34 @@ void wnetMessageSetup() {
                 messagePort, static_cast<unsigned>(messageMaxLength));
 }
 
-void wnetMessageLoop() {
+// Plain HTTP for this exercise: send the received text unchanged.
+static void uploadMessage(char* text, size_t length) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[HTTP] No upstream connection; upload skipped");
+    return;
+  }
+  WiFiClient client;
+  HTTPClient http;
+  http.setConnectTimeout(3000);
+  http.setTimeout(5000);
+  if (!http.begin(client, "http://httpbin.org/post")) {
+    Serial.println("[HTTP] Failed to start request");
+    return;
+  }
+  http.addHeader("Content-Type", "text/plain");
+  int status = http.POST(reinterpret_cast<uint8_t*>(text), length);
+  if (status >= 200 && status < 300) {
+    Serial.printf("[HTTP] Uploaded: %s | status %d\n", text, status);
+  } else if (status > 0) {
+    Serial.printf("[HTTP] Upload failed: status %d\n", status);
+  } else {
+    Serial.printf("[HTTP] Upload failed: %s\n",
+                  HTTPClient::errorToString(status).c_str());
+  }
+  http.end();
+}
+
+void wnetMessageLoop(bool uploadToHttpbin) {
   if (!messageNetworkReady()) {
     if (messageListening) {
       messageUdp.stop();
@@ -80,6 +108,9 @@ void wnetMessageLoop() {
         if (count > 0) {
           received[count] = '\0';
           Serial.printf("[RX %s] %s\n", sender.toString().c_str(), received);
+          if (uploadToHttpbin) {
+            uploadMessage(received, static_cast<size_t>(count));
+          }
         }
       }
       messageUdp.flush();

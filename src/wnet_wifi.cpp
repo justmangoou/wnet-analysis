@@ -31,6 +31,7 @@ void wnetStationSetup(bool dhcp) {
     Serial.println("Failed to configure station IP settings");
     return;
   }
+  WiFi.setAutoReconnect(true);
   WiFi.begin(UPSTREAM_SSID, UPSTREAM_PASSWORD);
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -98,6 +99,8 @@ void wnetApSetup(bool withUpstream) {
   WiFi.softAPConfig(apIp, apGateway, apSubnet);
   WiFi.softAP(AP_SSID, AP_PASSWORD, apChannel, 0, apMaxClients);
   if (withUpstream) {
+    WiFi.config(IPAddress(), IPAddress(), IPAddress());
+    WiFi.setAutoReconnect(true);
     WiFi.begin(UPSTREAM_SSID, UPSTREAM_PASSWORD);
   }
 
@@ -125,10 +128,15 @@ void wnetApLoop() {
     }
   }
 
+  static uint32_t lastClientPoll = 0;
+  if (millis() - lastClientPoll < 500) {
+    return;
+  }
+  lastClientPoll = millis();
   uint32_t sig = printClients(false);
   if (sig != lastSignature) {
     lastSignature = sig;
     printClients(true);
   }
-  delay(500);
+  // Keep the UDP receive loop responsive.
 }
