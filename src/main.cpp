@@ -1,14 +1,12 @@
 #include <Arduino.h>
 
-#include "wnet_wifi.h"
+#include "bluetooth.h"
 
 void setup() {
   Serial.begin(115200);
-  wnetApSetup(true);
-  wnetMessageSetup();
+  bluetoothSetup();
 }
 
 void loop() {
-  wnetApLoop();
-  wnetMessageLoop(true);
+  bluetoothLoop();
 }
