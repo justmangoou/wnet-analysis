@@ -1,7 +1,6 @@
 // Compile from this directory: typst compile report.typ report.pdf
 // Cover information.
 #let student = "Nguyễn Hoàng Tuấn"
-#let student-id = "24022923"
 #let class-group = "Mạng không dây (ELT3295 1)"
 
 #let blue = rgb("00477f")
@@ -45,8 +44,8 @@
 ]
 #v(15mm)
 #align(center, table(columns: (42mm, 85mm), stroke: none, inset: 5pt,
-  [Sinh viên thực hiện:], student,
-  [Mã sinh viên:], student-id,
+  [Giảng viên hướng dẫn:], [Lâm Sinh Công\ Cấn Quang Trường],
+  [Thành viên nhóm:], [Nguyễn Hoàng Tuấn\ Đào Hải Vinh\ Trịnh Thị Kim Oanh],
   [Lớp / Nhóm:], class-group,
 ))
 #v(1fr)
@@ -96,39 +95,49 @@ Trong quá trình thử nghiệm, các bản tin A1–A10 và E1–E10 đều đ
 
 = Bluetooth Low Energy — Bài 2
 
-== Mục tiêu và nguyên lý
-Triển khai kết nối BLE giữa hai ESP32 theo mô hình *GATT server–client*. Server quảng bá Service; client quét, kết nối và truy cập Characteristic theo UUID. Khác với luồng nối tiếp SPP của Bài 1, dữ liệu BLE trong bài được ghi và đọc qua một Characteristic.
+== Mô hình và cấu hình
+Thử nghiệm sử dụng *ESP32 làm GATT server* và *điện thoại Android làm client* với ứng dụng Serial Bluetooth Terminal. ESP32 cung cấp Nordic UART Service: Android gửi dữ liệu bằng thao tác Write; ESP32 gửi dữ liệu tới ứng dụng bằng Notify sau khi client đăng ký nhận thông báo.
 
-#table(columns: (37mm, 1fr),
-  [Thành phần], [Cấu hình],
-  [Server], [`WNET-BLE-Server`],
-  [Client], [`WNET-BLE-Client`],
-  [Service UUID], [`6b8a0001-3c6d-4fa0-9e21-7a1081f00101`],
-  [Characteristic UUID], [`6b8a0002-3c6d-4fa0-9e21-7a1081f00101`],
-  [Quyền truy cập], [`READ | WRITE`],
-  [Dữ liệu đầu vào], [Tối đa 20 byte mỗi dòng, không tính ký tự kết thúc dòng],
+#table(columns: (34mm, 1fr),
+  [Thành phần], [Cấu hình thực nghiệm],
+  [Server], [`WNET-BLE-Server` — ESP32],
+  [Client], [Android — Serial Bluetooth Terminal, profile Nordic UART],
+  [Service UUID], [`6e400001-b5a3-f393-e0a9-e50e24dcca9e`],
+  [Write UUID], [`6e400002-b5a3-f393-e0a9-e50e24dcca9e`],
+  [Notify UUID], [`6e400003-b5a3-f393-e0a9-e50e24dcca9e`],
+  [USB Serial], [115200 baud; CR, LF hoặc CRLF để kết thúc dòng],
 )
 
-== Chuẩn bị và thực hiện
-Mã nguồn BLE nằm trong `src/bluetooth_ble.cpp`. `src/main.cpp` hiện chạy Bluetooth Classic; để thực hiện Bài 2, cần thay cặp hàm gọi trong `setup()` và `loop()` theo vai trò rồi nạp riêng cho từng ESP32:
+== Cách thực hiện
++ Nạp chương trình gọi `bluetoothBleServerSetup()` trong `setup()` và `bluetoothBleServerLoop()` trong `loop()`. Mã xử lý nằm trong `src/bluetooth_ble.cpp`.
++ Trong ứng dụng Android, quét thiết bị BLE, chọn *WNET-BLE-Server* và kết nối bằng profile *Nordic UART*.
++ Gửi `Hello from Android` kèm ký tự kết thúc dòng. ESP32 gom dữ liệu và hiển thị một dòng có nhãn `[BLE RX]`.
++ Trên USB Serial Monitor, nhập `Hello from ESP` rồi nhấn Enter. ESP32 gửi qua Notify và ghi log `[BLE TX]`. Mỗi dòng tối đa 254 byte; dữ liệu gửi được chia thành các gói tối đa 20 byte để phù hợp ATT MTU mặc định.
++ Ngắt kết nối trên Android, chờ ESP32 quảng bá lại, kết nối lại và lặp lại việc gửi bản tin.
 
-#table(columns: (25mm, 1fr, 1fr),
-  [Vai trò], [Gọi sau `Serial.begin(115200)`], [Gọi trong `loop()`],
-  [Server], [`bluetoothBleServerSetup()`], [`bluetoothBleServerLoop()`],
-  [Client], [`bluetoothBleClientSetup()`], [`bluetoothBleClientLoop()`],
-)
+== Kết quả truyền dữ liệu và kết nối lại
+Log USB Serial thu được trong thực nghiệm:
 
-+ Khởi động server để tạo Service, Characteristic và bắt đầu quảng bá.
-+ Khởi động client. Client quét theo Service UUID, kết nối và tìm Characteristic có quyền đọc/ghi.
-+ Trên USB Serial của client, nhập `hello` rồi nhấn Enter với kết thúc dòng CR hoặc LF. Client ghi có phản hồi, sau đó đọc lại để đối chiếu.
-+ Kiểm tra server hiển thị `[BLE RX] hello`; client chỉ báo `[BLE] Write verified: hello` khi giá trị đọc lại trùng với bản tin đã ghi. Dòng vượt 20 byte bị loại bỏ.
+```text
+[BLE] Server WNET-BLE-Server | MAC 68:09:47:9b:87:8a
+[BLE] Advertising; waiting for client writes
+[BLE] Client connected
+[BLE RX] Hello from Android
+[BLE TX] Hello from ESP
+[BLE] Client disconnected
+[BLE] Advertising restarted
+[BLE] Client connected
+[BLE RX] Hello from Android
+[BLE TX] Hello from ESP
+```
 
-== Kiểm tra kết nối lại
-Callback ngắt kết nối của server đặt cờ để vòng lặp khởi động lại quảng bá. Khi mất kết nối, client xóa trạng thái bản tin, quay lại quét và tìm lại Service/Characteristic sau khi kết nối.
+#figure(
+  image("assets/2_android_ble.png", width: 100%),
+  caption: [Android gửi, nhận bản tin qua BLE Nordic UART trước và sau khi kết nối lại.],
+) <ble-android>
 
-Lần lượt khởi động lại server và client, chờ thiết lập lại kết nối rồi gửi một bản tin mới. Chỉ xác nhận thành công khi server nhận đúng và client đọc lại khớp nội dung. Việc có mã xử lý kết nối lại chưa thay thế cho kiểm thử thực tế.
+ESP32 nhận đúng bản tin `Hello from Android` trước và sau khi kết nối lại. Sau khi client ngắt kết nối, server khởi động lại quảng bá và chấp nhận kết nối mới. Ở cả hai lần kết nối, Android hiển thị đúng bản tin `Hello from ESP` do ESP32 gửi qua Notify. Log trên hai thiết bị xác nhận truyền văn bản thành công theo cả hai chiều trước và sau khi kết nối lại.
 
-#note[*Trạng thái thực nghiệm:* chưa có ảnh log BLE. Cần bổ sung minh chứng ghi/đọc Characteristic và truyền bản tin sau khi kết nối lại.]
 
 = Kết luận
-ESP32 và Android đã truyền văn bản hai chiều qua Bluetooth Classic, còn liên lạc được ở cuối tuyến hành lang dài *khoảng 25 m với 1 cửa chắn*. Các bản tin thử nghiệm được nhận đủ, có hiện tượng trễ và nhận dồn khi di chuyển. Phần BLE cần bổ sung kết quả kiểm thử thực tế.
+Bluetooth Classic truyền được dữ liệu ở cuối tuyến hành lang dài *khoảng 25 m với 1 cửa chắn*, nhận đủ bản tin thử nhưng có độ trễ khi di chuyển. Với BLE Nordic UART, ESP32 và Android trao đổi văn bản thành công theo cả hai chiều trước và sau khi kết nối lại.

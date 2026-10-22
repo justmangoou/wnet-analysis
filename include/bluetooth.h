@@ -4,7 +4,10 @@
 static const char* BLUETOOTH_NAME = "WNET-ESP32-BT";
 static const char* BLE_SERVER_NAME = "WNET-BLE-Server";
 static const char* BLE_CLIENT_NAME = "WNET-BLE-Client";
-static const char* BLE_SERVICE_UUID = "6b8a0001-3c6d-4fa0-9e21-7a1081f00101";
+// Nordic UART profile supported by Serial Bluetooth Terminal.
+static const char* BLE_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+static const char* BLE_WRITE_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+static const char* BLE_NOTIFY_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 static const char* BLE_MESSAGE_UUID = "6b8a0002-3c6d-4fa0-9e21-7a1081f00101";
 
 // Exercise 1: Classic Bluetooth Serial <-> USB Serial.
